@@ -11,7 +11,7 @@ from fuzzywuzzy import process, fuzz
 from collections import Counter
 import pandas as pd
 
-# ✅ Streamlit Page Setup
+# ✅ Streamlit Setup
 st.set_page_config(page_title="📦 Box Count OCR", layout="centered")
 
 # === CONFIG ===
@@ -22,17 +22,16 @@ DOWNLOAD_JSON_PATH = "last_summary.json"
 # === KNOWN MODELS ===
 known_models = [
     "Anycubic Kobra 2 Neo", "Anycubic Kobra 2 Pro", "Anycubic Kobra 2 Max",
-    "Anycubic Kobra 2", "Anycubic Kobra 2 Pro", "Anycubic Kobra 2 Max",
-    "Anycubic Kobra 3", "Anycubic Kobra 3 Combo", "Anycubic Kobra 2 Plus",
-    "Anycubic Kobra S1", "Anycubic Kobra S1 Combo", "Anycubic Kobra 3 Max",
-    "ACE PRO", "Anycubic Photon Mono 4", "Anycubic Photon Mono 4 Ultra",
-    "Anycubic Photon Mono M7", "Anycubic Photon Mono M7 Pro",
-    "Anycubic Photon Mono M7 Max", "Anycubic Wash & Cure 3 Plus",
-    "Anycubic Wash & Cure 3", "Anycubic Wash&Cure Max",
-    "Anycubic Color Engine Pro"
+    "Anycubic Kobra 2", "Anycubic Kobra 3", "Anycubic Kobra 3 Combo",
+    "Anycubic Kobra 2 Plus", "Anycubic Kobra S1", "Anycubic Kobra S1 Combo",
+    "Anycubic Kobra 3 Max", "ACE PRO", "Anycubic Photon Mono 4",
+    "Anycubic Photon Mono 4 Ultra", "Anycubic Photon Mono M7",
+    "Anycubic Photon Mono M7 Pro", "Anycubic Photon Mono M7 Max",
+    "Anycubic Wash & Cure 3 Plus", "Anycubic Wash & Cure 3",
+    "Anycubic Wash&Cure Max", "Anycubic Color Engine Pro"
 ]
 
-# === Initialize OCR Model ===
+# === PaddleOCR ===
 @st.cache_resource
 def load_ocr():
     return PaddleOCR(use_angle_cls=False, lang='en', rec_batch_num=2)
@@ -41,11 +40,10 @@ ocr_paddle = load_ocr()
 
 # === Helper Functions ===
 def clean_text(text):
-    text = re.sub(r"[^a-zA-Z0-9 &+]", " ", text)
-    return " ".join(text.lower().split())
+    return " ".join(re.sub(r"[^a-zA-Z0-9 &+]", " ", text).lower().split())
 
-def match_model(ocr_text, models, threshold=75):
-    cleaned = clean_text(ocr_text)
+def match_model(text, models, threshold=75):
+    cleaned = clean_text(text)
     if not cleaned:
         return None, 0
     for model in models:
@@ -59,14 +57,13 @@ def extract_text_with_paddleocr(image_bgr):
     blur = cv2.bilateralFilter(gray, 7, 30, 30)
     blur_bgr = cv2.cvtColor(blur, cv2.COLOR_GRAY2BGR)
 
-    paddle_out = ocr_paddle.ocr(blur_bgr, cls=False)
-    matched_models = []
+    result = ocr_paddle.ocr(blur_bgr, cls=False)
     all_lines = []
+    matched_models = []
 
-    for block in (paddle_out[0] if paddle_out else []):
+    for block in (result[0] if result else []):
         txt, conf = block[1]
-        if isinstance(conf, tuple):
-            conf = conf[0]
+        conf = conf[0] if isinstance(conf, tuple) else conf
         if conf < 0.8:
             continue
         all_lines.append(txt)
@@ -81,144 +78,80 @@ def extract_text_with_paddleocr(image_bgr):
 
     counts = Counter(matched_models)
     now = datetime.now()
-    return counts, now.strftime('%d %b %Y'), now.strftime('%I:%M %p'), now
+    return counts, now.strftime('%d %b %Y'), now.strftime('%I:%M %p')
 
-# === Streamlit UI ===
+# === OCR UI ===
 st.title("📦 OCR-based Box Counting System")
 
 image_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
 camera_image = st.camera_input("📸 Capture Image")
 
 img = None
-if camera_image is not None:
-    img = np.frombuffer(camera_image.getvalue(), np.uint8)
-    img = cv2.imdecode(img, cv2.IMREAD_COLOR)
+if camera_image:
+    img = cv2.imdecode(np.frombuffer(camera_image.getvalue(), np.uint8), cv2.IMREAD_COLOR)
     st.image(img, channels="BGR", use_container_width=True)
-elif image_file is not None:
+elif image_file:
     img = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
     st.image(img, channels="BGR", use_container_width=True)
 
-# OCR execution (only once on button click)
+# Run OCR
 if img is not None and st.button("🔍 Run OCR"):
-    counts, date_str, time_str, now = extract_text_with_paddleocr(img)
+    counts, date_str, time_str = extract_text_with_paddleocr(img)
     if not counts:
-        st.warning("❌ No known models detected. Try another image.")
+        st.warning("❌ No known models detected.")
     else:
-        st.session_state.ocr_counts = counts
-        st.session_state.ocr_date = date_str
-        st.session_state.ocr_time = time_str
-        st.session_state.ocr_now = now
-        st.session_state.final_counts = dict(counts)  # Initialize final counts
-        st.session_state.adjusted = False  # Flag for adjustments
+        st.session_state.counts = counts
+        st.session_state.date_str = date_str
+        st.session_state.time_str = time_str
 
-# Summary and Box Entry
-if 'ocr_counts' in st.session_state:
+# Display result
+if 'counts' in st.session_state:
     st.subheader("📊 OCR Results Summary")
-    counts = st.session_state.ocr_counts
-    date_str = st.session_state.ocr_date
-    time_str = st.session_state.ocr_time
+    st.table(pd.DataFrame(list(st.session_state.counts.items()), columns=["Model", "Count"]))
 
-    # Display original OCR results
-    st.markdown("**Original OCR Detection:**")
-    table_data = [[model, cnt] for model, cnt in counts.items()]
-    st.table(pd.DataFrame(table_data, columns=["Model", "Count"]))
+    with st.form("box_calc"):
+        st.markdown("**Layer Configuration**")
+        front = st.number_input("📦 Front layer boxes", min_value=1, value=1)
+        back = st.number_input("📦 Back layer boxes", min_value=1, value=1)
 
-    with st.form("box_form"):
-        st.markdown("**Box Configuration**")
-        col1, col2 = st.columns(2)
-        with col1:
-            front_boxes = st.number_input("📦 Boxes in the front layer:", min_value=1, step=1, value=1)
-        with col2:
-            back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1, value=1)
-        
-        st.markdown("**Box Adjustment**")
-        # Use st.radio with on_change to trigger rerun
-        action = st.radio("Box adjustment:", 
-                         ['No adjustment', 'Add boxes', 'Remove boxes'], 
-                         index=0, horizontal=True,
-                         key="box_action")
-        
-        # Show add/remove fields based on selection
-        if st.session_state.box_action == 'Add boxes':
-            add_val = st.number_input("➕ Number of boxes to add:", 
-                                    min_value=0, 
-                                    step=1, 
-                                    value=0,
-                                    key="add_boxes")
-            remove_val = 0
-        elif st.session_state.box_action == 'Remove boxes':
-            remove_val = st.number_input("➖ Number of boxes to remove:", 
-                                      min_value=0, 
-                                      step=1, 
-                                      value=0,
-                                      max_value=front_boxes*back_boxes,
-                                      key="remove_boxes")
-            add_val = 0
-        else:
-            add_val = 0
-            remove_val = 0
+        st.markdown("**Adjustments**")
+        option = st.radio("Modify boxes?", ["None", "Add", "Remove"])
 
-        submitted = st.form_submit_button("📥 Calculate & Save")
+        add = st.number_input("➕ Boxes to add", min_value=0, value=0) if option == "Add" else 0
+        rem = st.number_input("➖ Boxes to remove", min_value=0, value=0) if option == "Remove" else 0
 
-        if submitted:
-            total_boxes = front_boxes * back_boxes + add_val - remove_val
-            
-            # Update final counts in session state
-            st.session_state.final_counts = dict(counts)
-            for model in st.session_state.final_counts:
-                st.session_state.final_counts[model] = total_boxes
-            
-            st.session_state.adjusted = True
-            st.session_state.total_boxes = total_boxes
-            st.session_state.front_boxes = front_boxes
-            st.session_state.back_boxes = back_boxes
-            st.session_state.add_val = add_val
-            st.session_state.remove_val = remove_val
-            
-            st.success(f"📦 Final Total Boxes: {total_boxes}")
+        submit = st.form_submit_button("📥 Save Result")
+        if submit:
+            total = front * back + add - rem
+            date, time = st.session_state.date_str, st.session_state.time_str
+            final_rows = [[date, time, UPDATE_INFO, m, c, total] for m, c in st.session_state.counts.items()]
 
             # Save to CSV
-            header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"]
-            rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] 
-                   for m, c in st.session_state.final_counts.items()]
-            
-            new_file = not os.path.isfile(CSV_FILE)
+            file_exists = os.path.exists(CSV_FILE)
             with open(CSV_FILE, 'a', newline='') as f:
                 writer = csv.writer(f)
-                if new_file:
-                    writer.writerow(header)
-                writer.writerows(rows)
-            st.success(f"📁 CSV updated: `{CSV_FILE}`")
+                if not file_exists:
+                    writer.writerow(["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"])
+                writer.writerows(final_rows)
 
             # Save to JSON
-            summary = {
-                "Date": date_str,
-                "Time": time_str,
+            json_data = {
+                "Date": date,
+                "Time": time,
                 "Update_Info": UPDATE_INFO,
-                "Total_Boxes": total_boxes,
-                "Models": st.session_state.final_counts
+                "Total_Boxes": total,
+                "Models": dict(st.session_state.counts)
             }
             with open(DOWNLOAD_JSON_PATH, 'w') as jf:
-                json.dump(summary, jf, indent=2)
-            st.success(f"📁 JSON saved: `{DOWNLOAD_JSON_PATH}`")
+                json.dump(json_data, jf, indent=2)
 
-    # Display final results after adjustment
-    if st.session_state.get('adjusted', False):
-        st.markdown("---")
-        st.subheader("📦 Final Box Count")
-        
-        # Create final table in requested format
-        final_data = [[date_str, time_str, UPDATE_INFO, model, count, st.session_state.total_boxes] 
-                     for model, count in st.session_state.final_counts.items()]
-        
-        final_df = pd.DataFrame(final_data, 
-                              columns=["Date", "Time", "Update_Info", "Model", "Count", "Total Boxes"])
-        
-        # Highlight the total boxes column
-        def highlight_total(s):
-            return ['background-color: #FFE873' if s.name == 'Total Boxes' else '' for v in s]
-        
-        st.table(final_df.style.apply(highlight_total, axis=1))
+            st.success(f"📦 Final Box Count: {total}")
+            st.session_state.final_df = pd.DataFrame(final_rows, columns=["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"])
+
+# Show Final Table
+if 'final_df' in st.session_state:
+    st.subheader("📋 Final Saved Table")
+    st.dataframe(st.session_state.final_df)
 
 # === Download Buttons ===
 st.markdown("---")
@@ -227,16 +160,12 @@ with col1:
     if os.path.exists(CSV_FILE):
         with open(CSV_FILE, 'rb') as f:
             st.download_button("⬇️ Download CSV", f, file_name=CSV_FILE, mime='text/csv')
-
 with col2:
     if os.path.exists(DOWNLOAD_JSON_PATH):
         with open(DOWNLOAD_JSON_PATH, 'rb') as jf:
-            st.download_button("⬇️ Download JSON Summary", jf, 
-                              file_name=DOWNLOAD_JSON_PATH, 
-                              mime='application/json')
+            st.download_button("⬇️ Download JSON", jf, file_name=DOWNLOAD_JSON_PATH, mime='application/json')
 
-# Clear session button
+# Reset Session
 if st.button("🔄 Clear Session"):
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
+    st.session_state.clear()
     st.experimental_rerun()
