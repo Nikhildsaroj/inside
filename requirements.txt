@@ -1,8 +1,10 @@
 paddleocr==2.10.0
 paddlepaddle==3.0.0
 opencv-python-headless
-matplotlib==3.10.0
+matplotlib==3.7.3
 rapidfuzz==3.13.0
 fuzzywuzzy[speedup]
-streamlit
-setuptools==75.2.0  # Match Colab's version
+streamlit==1.13.0
+setuptools==75.2.0
+numpy
+pandas
