@@ -19,7 +19,6 @@ CSV_FILE = "indise_ocr_result.csv"
 UPDATE_INFO = "Inside Box Snapshot"
 DOWNLOAD_JSON_PATH = "last_summary.json"
 
-
 # === KNOWN MODELS ===
 known_models = [
     "Anycubic Kobra 2 Neo", "Anycubic Kobra 2 Pro", "Anycubic Kobra 2 Max",
@@ -33,7 +32,7 @@ known_models = [
 ]
 
 # === Initialize OCR (lightweight) ===
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def load_ocr():
     return PaddleOCR(use_angle_cls=False, lang='en', rec_batch_num=2)
 
@@ -84,10 +83,8 @@ def extract_text_with_paddleocr(image_bgr):
     return counts, now.strftime('%d %b %Y'), now.strftime('%I:%M %p'), now
 
 # === Streamlit UI ===
-
 st.title("📦 OCR-based Box Counting System")
 
-# === Upload/Capture Image ===
 image_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
 camera_image = st.camera_input("📸 Capture Image")
 
@@ -95,70 +92,71 @@ img = None
 if camera_image is not None:
     img = np.frombuffer(camera_image.getvalue(), np.uint8)
     img = cv2.imdecode(img, cv2.IMREAD_COLOR)
-    st.image(img, channels="BGR", use_column_width=True)
+    st.image(img, channels="BGR", use_container_width=True)
 elif image_file is not None:
     img = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
-    st.image(img, channels="BGR", use_column_width=True)
+    st.image(img, channels="BGR", use_container_width=True)
 
-# === OCR Button ===
-if img is not None:
-    if st.button("🔍 Run OCR"):
-        counts, date_str, time_str, now = extract_text_with_paddleocr(img)
-        if not counts:
-            st.warning("❌ No known models detected. Try another image.")
-        else:
-            st.session_state["ocr_counts"] = counts
-            st.session_state["ocr_date"] = date_str
-            st.session_state["ocr_time"] = time_str
-            st.session_state["ocr_now"] = now
-            st.success("✅ OCR Completed!")
+# OCR execution (only once on button click)
+if img is not None and st.button("🔍 Run OCR"):
+    counts, date_str, time_str, now = extract_text_with_paddleocr(img)
+    if not counts:
+        st.warning("❌ No known models detected. Try another image.")
+    else:
+        st.session_state.ocr_counts = counts
+        st.session_state.ocr_date = date_str
+        st.session_state.ocr_time = time_str
+        st.session_state.ocr_now = now
 
-# === Box Calculation Section ===
-if "ocr_counts" in st.session_state:
+# Summary and Box Entry
+if 'ocr_counts' in st.session_state:
     st.subheader("📊 OCR Results Summary")
-    counts = st.session_state["ocr_counts"]
-    date_str = st.session_state["ocr_date"]
-    time_str = st.session_state["ocr_time"]
-    now = st.session_state["ocr_now"]
+    counts = st.session_state.ocr_counts
+    date_str = st.session_state.ocr_date
+    time_str = st.session_state.ocr_time
 
     table_data = [[model, cnt] for model, cnt in counts.items()]
     st.table(pd.DataFrame(table_data, columns=["Model", "Count"]))
 
-    front_boxes = st.number_input("📦 Boxes in the front layer:", min_value=1, step=1)
-    back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1)
-    action = st.selectbox("Do you want to add/remove boxes?", ['none', 'add', 'remove'])
+    with st.form("box_form"):
+        front_boxes = st.number_input("📦 Boxes in the front layer:", min_value=1, step=1)
+        back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1)
+        action = st.selectbox("Do you want to add/remove boxes?", ['none', 'add', 'remove'])
 
-    if st.button("📥 Calculate & Save"):
-        total_boxes = front_boxes * back_boxes
-
+        add_val = 0
+        remove_val = 0
         if action == 'add':
-            total_boxes += st.number_input("➕ Add how many boxes?", min_value=0, step=1)
+            add_val = st.number_input("➕ Add how many boxes?", min_value=0, step=1)
         elif action == 'remove':
-            total_boxes -= st.number_input("➖ Remove how many boxes?", min_value=0, step=1)
+            remove_val = st.number_input("➖ Remove how many boxes?", min_value=0, step=1)
 
-        st.success(f"📦 Final Total Boxes: {total_boxes}")
+        submitted = st.form_submit_button("📥 Calculate & Save")
 
-        # === Save CSV ===
-        header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"]
-        rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] for m, c in counts.items()]
-        new_file = not os.path.isfile(CSV_FILE)
-        with open(CSV_FILE, 'a', newline='') as f:
-            writer = csv.writer(f)
-            if new_file:
-                writer.writerow(header)
-            writer.writerows(rows)
-        st.success(f"📁 CSV updated: `{CSV_FILE}`")
+        if submitted:
+            total_boxes = front_boxes * back_boxes + add_val - remove_val
+            st.success(f"📦 Final Total Boxes: {total_boxes}")
 
-        # === Save JSON ===
-        summary = {
-            "Date": date_str,
-            "Time": time_str,
-            "Update_Info": UPDATE_INFO,
-            "Total_Boxes": total_boxes
-        }
-        with open(DOWNLOAD_JSON_PATH, 'w') as jf:
-            json.dump(summary, jf, indent=2)
-        st.success(f"📁 JSON saved: `{DOWNLOAD_JSON_PATH}`")
+            # Save to CSV
+            header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"]
+            rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] for m, c in counts.items()]
+            new_file = not os.path.isfile(CSV_FILE)
+            with open(CSV_FILE, 'a', newline='') as f:
+                writer = csv.writer(f)
+                if new_file:
+                    writer.writerow(header)
+                writer.writerows(rows)
+            st.success(f"📁 CSV updated: `{CSV_FILE}`")
+
+            # Save to JSON
+            summary = {
+                "Date": date_str,
+                "Time": time_str,
+                "Update_Info": UPDATE_INFO,
+                "Total_Boxes": total_boxes
+            }
+            with open(DOWNLOAD_JSON_PATH, 'w') as jf:
+                json.dump(summary, jf, indent=2)
+            st.success(f"📁 JSON saved: `{DOWNLOAD_JSON_PATH}`")
 
 # === Download Buttons ===
 st.markdown("---")
