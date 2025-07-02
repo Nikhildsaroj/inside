@@ -33,7 +33,12 @@ if os.path.exists(broken_dir):
     shutil.rmtree(broken_dir)
 
 # === Initialize PaddleOCR ===
-ocr_paddle = PaddleOCR(use_angle_cls=False, lang='en')  # ✅ Recommended
+ocr_paddle = PaddleOCR(
+    use_angle_cls=False,
+    lang='en',
+    det_model_dir='/home/appuser/.paddleocr/whl/det/en/en_PP-OCRv3_det_infer',
+    rec_model_dir='/home/appuser/.paddleocr/whl/rec/en/en_PP-OCRv3_rec_infer'
+)
 
 
 # === Clean and fuzzy match functions ===
