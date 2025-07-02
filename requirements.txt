@@ -8,4 +8,5 @@ streamlit==1.13.0
 setuptools==75.2.0
 numpy
 pandas
-altair
+altair==4.2.2
+
