@@ -132,19 +132,21 @@ if 'ocr_counts' in st.session_state:
             back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1, value=1)
         
         st.markdown("**Box Adjustment**")
+        # Use st.radio with on_change to trigger rerun
         action = st.radio("Box adjustment:", 
                          ['No adjustment', 'Add boxes', 'Remove boxes'], 
-                         index=0, horizontal=True)
-
-        # Show add/remove fields immediately when selected
-        if action == 'Add boxes':
+                         index=0, horizontal=True,
+                         key="box_action")
+        
+        # Show add/remove fields based on selection
+        if st.session_state.box_action == 'Add boxes':
             add_val = st.number_input("➕ Number of boxes to add:", 
                                     min_value=0, 
                                     step=1, 
                                     value=0,
                                     key="add_boxes")
             remove_val = 0
-        elif action == 'Remove boxes':
+        elif st.session_state.box_action == 'Remove boxes':
             remove_val = st.number_input("➖ Number of boxes to remove:", 
                                       min_value=0, 
                                       step=1, 
@@ -175,7 +177,7 @@ if 'ocr_counts' in st.session_state:
             
             st.success(f"📦 Final Total Boxes: {total_boxes}")
 
-            # Save to CSV (simplified format as requested)
+            # Save to CSV
             header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"]
             rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] 
                    for m, c in st.session_state.final_counts.items()]
