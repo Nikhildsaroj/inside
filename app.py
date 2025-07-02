@@ -29,7 +29,7 @@ known_models = [
 ]
 
 # === Initialize OCR (lightweight) ===
-@st.cache_resource
+@st.cache(allow_output_mutation=True)
 def load_ocr():
     return PaddleOCR(use_angle_cls=False, lang='en', rec_batch_num=2)
 
