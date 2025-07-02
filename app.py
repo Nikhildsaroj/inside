@@ -22,6 +22,7 @@ DOWNLOAD_JSON_PATH = "last_summary.json"
 # === KNOWN MODELS ===
 known_models = [
     "Anycubic Kobra 2 Neo", "Anycubic Kobra 2 Pro", "Anycubic Kobra 2 Max",
+    "Anycubic Kobra 2", "Anycubic Kobra 2 Pro", "Anycubic Kobra 2 Max",
     "Anycubic Kobra 3", "Anycubic Kobra 3 Combo", "Anycubic Kobra 2 Plus",
     "Anycubic Kobra S1", "Anycubic Kobra S1 Combo", "Anycubic Kobra 3 Max",
     "ACE PRO", "Anycubic Photon Mono 4", "Anycubic Photon Mono 4 Ultra",
@@ -107,6 +108,8 @@ if img is not None and st.button("🔍 Run OCR"):
         st.session_state.ocr_date = date_str
         st.session_state.ocr_time = time_str
         st.session_state.ocr_now = now
+        st.session_state.final_counts = dict(counts)  # Initialize final counts
+        st.session_state.adjusted = False  # Flag for adjustments
 
 # Summary and Box Entry
 if 'ocr_counts' in st.session_state:
@@ -115,29 +118,46 @@ if 'ocr_counts' in st.session_state:
     date_str = st.session_state.ocr_date
     time_str = st.session_state.ocr_time
 
+    # Display original OCR results
+    st.markdown("**Original OCR Detection:**")
     table_data = [[model, cnt] for model, cnt in counts.items()]
     st.table(pd.DataFrame(table_data, columns=["Model", "Count"]))
 
     with st.form("box_form"):
-        front_boxes = st.number_input("📦 Boxes in the front layer:", min_value=1, step=1)
-        back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1)
-        action = st.selectbox("Do you want to add/remove boxes?", ['none', 'add', 'remove'])
+        st.markdown("**Box Configuration**")
+        front_boxes = st.number_input("📦 Boxes in the front layer:", min_value=1, step=1, value=1)
+        back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1, value=1)
+        
+        st.markdown("**Box Adjustment**")
+        action = st.radio("Do you want to add or remove boxes?", 
+                         ['none', 'add', 'remove'], 
+                         index=0, horizontal=True)
 
         add_val, remove_val = 0, 0
         if action == 'add':
-            add_val = st.number_input("➕ Add how many boxes?", min_value=0, step=1, key="add_input")
+            add_val = st.number_input("➕ Number of boxes to add:", min_value=0, step=1, value=0)
         elif action == 'remove':
-            remove_val = st.number_input("➖ Remove how many boxes?", min_value=0, step=1, key="remove_input")
+            remove_val = st.number_input("➖ Number of boxes to remove:", min_value=0, step=1, value=0)
 
         submitted = st.form_submit_button("📥 Calculate & Save")
 
         if submitted:
             total_boxes = front_boxes * back_boxes + add_val - remove_val
+            
+            # Update final counts in session state
+            st.session_state.final_counts = dict(counts)
+            for model in st.session_state.final_counts:
+                st.session_state.final_counts[model] = total_boxes
+            
+            st.session_state.adjusted = True
+            st.session_state.total_boxes = total_boxes
             st.success(f"📦 Final Total Boxes: {total_boxes}")
 
             # Save to CSV
             header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"]
-            rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] for m, c in counts.items()]
+            rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] 
+                   for m, c in st.session_state.final_counts.items()]
+            
             new_file = not os.path.isfile(CSV_FILE)
             with open(CSV_FILE, 'a', newline='') as f:
                 writer = csv.writer(f)
@@ -151,18 +171,52 @@ if 'ocr_counts' in st.session_state:
                 "Date": date_str,
                 "Time": time_str,
                 "Update_Info": UPDATE_INFO,
-                "Total_Boxes": total_boxes
+                "Total_Boxes": total_boxes,
+                "Models": st.session_state.final_counts
             }
             with open(DOWNLOAD_JSON_PATH, 'w') as jf:
                 json.dump(summary, jf, indent=2)
             st.success(f"📁 JSON saved: `{DOWNLOAD_JSON_PATH}`")
 
+    # Display final results after adjustment
+    if st.session_state.get('adjusted', False):
+        st.markdown("---")
+        st.subheader("📦 Final Box Count Summary")
+        
+        final_table = pd.DataFrame(
+            [[model, cnt] for model, cnt in st.session_state.final_counts.items()],
+            columns=["Model", "Final Count"]
+        )
+        
+        # Add total row
+        total_df = pd.DataFrame([["TOTAL", st.session_state.total_boxes]], 
+                              columns=["Model", "Final Count"])
+        final_table = pd.concat([final_table, total_df], ignore_index=True)
+        
+        # Highlight the total row
+        def highlight_total(row):
+            return ['background-color: yellow' if row['Model'] == 'TOTAL' else '' 
+                   for _ in row]
+        
+        st.table(final_table.style.apply(highlight_total, axis=1))
+
 # === Download Buttons ===
 st.markdown("---")
-if os.path.exists(CSV_FILE):
-    with open(CSV_FILE, 'rb') as f:
-        st.download_button("⬇️ Download CSV", f, file_name=CSV_FILE, mime='text/csv')
+col1, col2 = st.columns(2)
+with col1:
+    if os.path.exists(CSV_FILE):
+        with open(CSV_FILE, 'rb') as f:
+            st.download_button("⬇️ Download CSV", f, file_name=CSV_FILE, mime='text/csv')
 
-if os.path.exists(DOWNLOAD_JSON_PATH):
-    with open(DOWNLOAD_JSON_PATH, 'rb') as jf:
-        st.download_button("⬇️ Download JSON Summary", jf, file_name=DOWNLOAD_JSON_PATH, mime='application/json')
+with col2:
+    if os.path.exists(DOWNLOAD_JSON_PATH):
+        with open(DOWNLOAD_JSON_PATH, 'rb') as jf:
+            st.download_button("⬇️ Download JSON Summary", jf, 
+                              file_name=DOWNLOAD_JSON_PATH, 
+                              mime='application/json')
+
+# Clear session button
+if st.button("🔄 Clear Session"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.experimental_rerun()
