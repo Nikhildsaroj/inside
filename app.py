@@ -33,7 +33,8 @@ if os.path.exists(broken_dir):
     shutil.rmtree(broken_dir)
 
 # === Initialize PaddleOCR ===
-ocr_paddle = PaddleOCR(use_angle_cls=True, lang='en')
+ocr_paddle = PaddleOCR(use_angle_cls=False, lang='en')  # ✅ Recommended
+
 
 # === Clean and fuzzy match functions ===
 def clean_text(text):
