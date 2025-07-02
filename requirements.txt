@@ -1,6 +1,6 @@
 paddleocr==2.10.0
 paddlepaddle==3.0.0
-opencv-python
+opencv-python-headless
 matplotlib==3.10.0
 rapidfuzz==3.13.0
 fuzzywuzzy[speedup]
