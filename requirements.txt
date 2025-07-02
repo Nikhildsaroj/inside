@@ -1,0 +1,8 @@
+paddleocr==2.10.0
+paddlepaddle==3.0.0
+opencv-python
+matplotlib==3.10.0
+rapidfuzz==3.13.0
+fuzzywuzzy[speedup]
+streamlit
+setuptools==75.2.0  # Match Colab's version
