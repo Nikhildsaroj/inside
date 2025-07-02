@@ -11,10 +11,14 @@ from fuzzywuzzy import process, fuzz
 from collections import Counter
 import pandas as pd
 
+# ✅ MUST be first Streamlit call
+st.set_page_config(page_title="Box Count OCR", layout="centered")
+
 # === CONFIG ===
 CSV_FILE = "indise_ocr_result.csv"
 UPDATE_INFO = "Inside Box Snapshot"
 DOWNLOAD_JSON_PATH = "last_summary.json"
+
 
 # === KNOWN MODELS ===
 known_models = [
