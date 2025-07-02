@@ -136,23 +136,25 @@ if 'ocr_counts' in st.session_state:
                          ['No adjustment', 'Add boxes', 'Remove boxes'], 
                          index=0, horizontal=True)
 
-        add_val = 0
-        remove_val = 0
-        
-        # Show add/remove fields only when selected
+        # Show add/remove fields immediately when selected
         if action == 'Add boxes':
             add_val = st.number_input("➕ Number of boxes to add:", 
-                                     min_value=0, 
-                                     step=1, 
-                                     value=0,
-                                     key="add_boxes")
+                                    min_value=0, 
+                                    step=1, 
+                                    value=0,
+                                    key="add_boxes")
+            remove_val = 0
         elif action == 'Remove boxes':
             remove_val = st.number_input("➖ Number of boxes to remove:", 
-                                       min_value=0, 
-                                       step=1, 
-                                       value=0,
-                                       max_value=front_boxes*back_boxes,
-                                       key="remove_boxes")
+                                      min_value=0, 
+                                      step=1, 
+                                      value=0,
+                                      max_value=front_boxes*back_boxes,
+                                      key="remove_boxes")
+            add_val = 0
+        else:
+            add_val = 0
+            remove_val = 0
 
         submitted = st.form_submit_button("📥 Calculate & Save")
 
@@ -173,9 +175,9 @@ if 'ocr_counts' in st.session_state:
             
             st.success(f"📦 Final Total Boxes: {total_boxes}")
 
-            # Save to CSV
-            header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes", "Front_Layer", "Back_Layer", "Added", "Removed"]
-            rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes, front_boxes, back_boxes, add_val, remove_val] 
+            # Save to CSV (simplified format as requested)
+            header = ["Date", "Time", "Update_Info", "Model", "Count", "Total_Boxes"]
+            rows = [[date_str, time_str, UPDATE_INFO, m, c, total_boxes] 
                    for m, c in st.session_state.final_counts.items()]
             
             new_file = not os.path.isfile(CSV_FILE)
@@ -192,10 +194,6 @@ if 'ocr_counts' in st.session_state:
                 "Time": time_str,
                 "Update_Info": UPDATE_INFO,
                 "Total_Boxes": total_boxes,
-                "Front_Layer": front_boxes,
-                "Back_Layer": back_boxes,
-                "Added_Boxes": add_val,
-                "Removed_Boxes": remove_val,
                 "Models": st.session_state.final_counts
             }
             with open(DOWNLOAD_JSON_PATH, 'w') as jf:
@@ -205,28 +203,20 @@ if 'ocr_counts' in st.session_state:
     # Display final results after adjustment
     if st.session_state.get('adjusted', False):
         st.markdown("---")
-        st.subheader("📦 Final Box Count Summary")
+        st.subheader("📦 Final Box Count")
         
-        # Create detailed breakdown
-        breakdown_data = [
-            ["Front layer boxes", st.session_state.front_boxes],
-            ["Back layer boxes", st.session_state.back_boxes],
-            ["Base total (front × back)", st.session_state.front_boxes * st.session_state.back_boxes],
-            ["Boxes added", st.session_state.add_val],
-            ["Boxes removed", st.session_state.remove_val],
-            ["", ""],  # Empty row for spacing
-            ["TOTAL BOXES", st.session_state.total_boxes]
-        ]
+        # Create final table in requested format
+        final_data = [[date_str, time_str, UPDATE_INFO, model, count, st.session_state.total_boxes] 
+                     for model, count in st.session_state.final_counts.items()]
         
-        breakdown_df = pd.DataFrame(breakdown_data, columns=["Calculation", "Count"])
+        final_df = pd.DataFrame(final_data, 
+                              columns=["Date", "Time", "Update_Info", "Model", "Count", "Total Boxes"])
         
-        # Highlight the total row
-        def highlight_total(row):
-            if row['Calculation'] == "TOTAL BOXES":
-                return ['font-weight: bold; background-color: #FFE873', 'font-weight: bold; background-color: #FFE873']
-            return ['', '']
+        # Highlight the total boxes column
+        def highlight_total(s):
+            return ['background-color: #FFE873' if s.name == 'Total Boxes' else '' for v in s]
         
-        st.table(breakdown_df.style.apply(highlight_total, axis=1))
+        st.table(final_df.style.apply(highlight_total, axis=1))
 
 # === Download Buttons ===
 st.markdown("---")
