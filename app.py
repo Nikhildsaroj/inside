@@ -84,7 +84,7 @@ def extract_text_with_paddleocr(image_bgr):
     return counts, now.strftime('%d %b %Y'), now.strftime('%I:%M %p'), now
 
 # === Streamlit UI ===
-st.set_page_config(page_title="Box Count OCR", layout="centered")
+
 st.title("📦 OCR-based Box Counting System")
 
 # === Upload/Capture Image ===
