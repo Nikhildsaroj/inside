@@ -4,7 +4,7 @@ opencv-python-headless
 matplotlib==3.7.3
 rapidfuzz==3.13.0
 fuzzywuzzy[speedup]
-streamlit==1.13.0
+streamlit
 setuptools==75.2.0
 numpy
 pandas
