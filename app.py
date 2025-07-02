@@ -29,13 +29,11 @@ known_models = [
 ]
 
 # === Initialize OCR (lightweight) ===
-ocr_paddle = PaddleOCR(
-    use_angle_cls=False,
-    lang='en',
-    det_model_dir=os.path.expanduser('~/.paddleocr/whl/det/en/en_PP-OCRv3_det_infer'),
-    rec_model_dir=os.path.expanduser('~/.paddleocr/whl/rec/en/en_PP-OCRv3_rec_infer'),
-    rec_batch_num=2
-)
+@st.cache_resource
+def load_ocr():
+    return PaddleOCR(use_angle_cls=False, lang='en', rec_batch_num=2)
+
+ocr_paddle = load_ocr()
 
 # === Utility Functions ===
 def clean_text(text):
@@ -85,15 +83,6 @@ def extract_text_with_paddleocr(image_bgr):
 st.set_page_config(page_title="Box Count OCR", layout="centered")
 st.title("📦 OCR-based Box Counting System")
 
-# Style
-st.markdown("""
-    <style>
-        .stButton button {background-color: #4CAF50; color: white;}
-        .css-1kyxreq {color: blue;}
-        .streamlit-expanderHeader {font-size: 1.25rem;}
-    </style>
-""", unsafe_allow_html=True)
-
 # === Upload/Capture Image ===
 image_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
 camera_image = st.camera_input("📸 Capture Image")
@@ -111,11 +100,14 @@ elif image_file is not None:
 if img is not None:
     if st.button("🔍 Run OCR"):
         counts, date_str, time_str, now = extract_text_with_paddleocr(img)
-        st.session_state["ocr_counts"] = counts
-        st.session_state["ocr_date"] = date_str
-        st.session_state["ocr_time"] = time_str
-        st.session_state["ocr_now"] = now
-        st.success("✅ OCR Completed!")
+        if not counts:
+            st.warning("❌ No known models detected. Try another image.")
+        else:
+            st.session_state["ocr_counts"] = counts
+            st.session_state["ocr_date"] = date_str
+            st.session_state["ocr_time"] = time_str
+            st.session_state["ocr_now"] = now
+            st.success("✅ OCR Completed!")
 
 # === Box Calculation Section ===
 if "ocr_counts" in st.session_state:
@@ -125,8 +117,8 @@ if "ocr_counts" in st.session_state:
     time_str = st.session_state["ocr_time"]
     now = st.session_state["ocr_now"]
 
-    for model, cnt in counts.items():
-        st.write(f"✅ {model}: {cnt} time(s)")
+    table_data = [[model, cnt] for model, cnt in counts.items()]
+    st.table(pd.DataFrame(table_data, columns=["Model", "Count"]))
 
     front_boxes = st.number_input("📦 Boxes in the front layer:", min_value=1, step=1)
     back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1)
