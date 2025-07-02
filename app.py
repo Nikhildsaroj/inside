@@ -74,8 +74,9 @@ def extract_text_with_paddleocr(image_bgr):
 # === UI ===
 st.title("📦 OCR-based Box Counting System")
 
-image_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
-camera_image = st.camera_input("📸 Capture Image")
+image_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"], key="upload_file")
+camera_image = st.camera_input("📸 Capture Image", key="camera_input")
+
 
 img = None
 if camera_image:
