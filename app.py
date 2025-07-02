@@ -11,8 +11,8 @@ from fuzzywuzzy import process, fuzz
 from collections import Counter
 import pandas as pd
 
-# ✅ MUST be first Streamlit call
-st.set_page_config(page_title="Box Count OCR", layout="centered")
+# ✅ Streamlit Page Setup
+st.set_page_config(page_title="📦 Box Count OCR", layout="centered")
 
 # === CONFIG ===
 CSV_FILE = "indise_ocr_result.csv"
@@ -31,14 +31,14 @@ known_models = [
     "Anycubic Color Engine Pro"
 ]
 
-# === Initialize OCR (lightweight) ===
+# === Initialize OCR Model ===
 @st.cache_resource
 def load_ocr():
     return PaddleOCR(use_angle_cls=False, lang='en', rec_batch_num=2)
 
 ocr_paddle = load_ocr()
 
-# === Utility Functions ===
+# === Helper Functions ===
 def clean_text(text):
     text = re.sub(r"[^a-zA-Z0-9 &+]", " ", text)
     return " ".join(text.lower().split())
@@ -123,12 +123,11 @@ if 'ocr_counts' in st.session_state:
         back_boxes = st.number_input("📦 Boxes in the back layer:", min_value=1, step=1)
         action = st.selectbox("Do you want to add/remove boxes?", ['none', 'add', 'remove'])
 
-        add_val = 0
-        remove_val = 0
+        add_val, remove_val = 0, 0
         if action == 'add':
-            add_val = st.number_input("➕ Add how many boxes?", min_value=0, step=1)
+            add_val = st.number_input("➕ Add how many boxes?", min_value=0, step=1, key="add_input")
         elif action == 'remove':
-            remove_val = st.number_input("➖ Remove how many boxes?", min_value=0, step=1)
+            remove_val = st.number_input("➖ Remove how many boxes?", min_value=0, step=1, key="remove_input")
 
         submitted = st.form_submit_button("📥 Calculate & Save")
 
